@@ -1,0 +1,304 @@
+import os
+import threading
+import tkinter as tk
+from tkinter import ttk
+import pandas as pd
+import logging
+# 输出运行日志
+# logging.basicConfig(filename='program.log', level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(message)s')
+
+def calculate_file_size(file_path):
+    file_size = os.path.getsize(file_path)
+    file_size_kb = round(file_size / 1024, 2)
+    return file_size_kb
+
+def generate_catalogue():
+    folder_path = folder_path_var.get()
+
+    # 显示程序运行结果
+    result_label.config(text="Program started running.")
+    logging.info('Program started running.')
+
+    # 遍历文件夹及其所有子文件夹，并检查是否为空
+    folder_info = []
+    total_folders = 0
+    checked_folders = 0
+    lock = threading.Lock()
+    def process_folder(root):
+        nonlocal checked_folders
+        nonlocal folder_info
+        nonlocal total_folders
+        # check if folder is empty
+        if not os.listdir(root):
+            with lock:
+                folder_info.append([root, os.path.basename(root), '!!!Folder Is Empty!!!', 0])
+                # checked_folders += 1
+                progress_label.config(text=f"Checked {checked_folders} out of {total_folders} folders.")
+            logging.debug(f"Processed empty folder: {root}")
+            logging.debug(f"Checked {checked_folders} files out of {total_folders} folders.")
+            return
+        for file in os.listdir(root):
+            file_name = os.fsdecode(os.path.join(root, file))
+            try:
+                if os.path.isdir(file_name):
+                    total_folders += 1
+                    process_folder(file_name)
+                else:
+                    file_size_kb = calculate_file_size(file_name)
+                    with lock:
+                        folder_info.append([root, os.path.basename(root), file, file_size_kb])
+                        checked_folders += 1
+                        progress_label.config(text=f"Checked {checked_folders} files out of {total_folders} folders.")
+            except Exception as e:
+                logging.warning(f"Skipped file/folder: {file_name}, due to {e}")
+        logging.debug(f"Processed folder: {root}")
+        logging.debug(f"Checked {checked_folders} files out of {total_folders} folders.")
+
+    process_folder(folder_path)
+
+    # 显示程序运行结果
+    result_label.config(text="Program finished running.")
+    logging.info('Program finished running.')
+
+    # 生成目录列表Excel文件
+    output_excel_file_path = os.path.join(folder_path, "Catalogue List.xlsx")
+    with pd.ExcelWriter(output_excel_file_path, engine='xlsxwriter') as writer:
+        df = pd.DataFrame(folder_info, columns=['Folder Path', 'Folder Name', 'File Name', 'File Size(KB)'])
+        df.to_excel(writer, index=False)
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+        bold_format = workbook.add_format({'bold': True, 'align': 'center'})
+        center_format = workbook.add_format({'align': 'center'})
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, bold_format)
+            worksheet.set_column(col_num, col_num, len(str(value)) + 20)
+            worksheet.set_row(0, None, bold_format)
+        for row_num, row_data in enumerate(df.values):
+            for col_num, value in enumerate(row_data):
+                worksheet.write(row_num + 1, col_num, value, center_format)
+
+def start_program():
+    t = threading.Thread(target=generate_catalogue)
+    t.start()
+
+# 创建GUI界面
+root = tk.Tk()
+root.title("Folder Catalogue Generator")
+
+# 创建GUI界面的控件
+folder_path_var = tk.StringVar()
+folder_path_label = ttk.Label(root, text="Folder Path:")
+folder_path_entry = ttk.Entry(root, textvariable=folder_path_var)
+result_label = ttk.Label(root)
+progress_label = ttk.Label(root)
+start_button = ttk.Button(root, text="Start", command=start_program)
+
+# 设置控件的位置和大小
+folder_path_label.grid(row=0, column=0)
+folder_path_entry.grid(row=0, column=1)
+folder_path_entry.configure(width=60)
+result_label.grid(row=1, column=0)
+
+progress_label.grid(row=2, column=0)
+start_button.grid(row=3, column=1)
+# folder_path_entry.place(x=100,y=0)
+# 启动GUI界面的事件循环
+root.mainloop()
+# # V6.0
+# # import os
+# # import tkinter as tk
+# # from tkinter import ttk
+# # import pandas as pd
+# # import threading
+# # from queue import Queue
+# #
+# # def calculate_file_size(file_path):
+# #     file_size = os.path.getsize(file_path)
+# #     file_size_kb = round(file_size / 1024, 2)
+# #     return file_size_kb
+# #
+# # def generate_catalogue():
+# #     folder_path = folder_path_var.get()
+# #
+# #     # 显示程序运行结果
+# #     result_label.config(text="Program started running.")
+# #
+# #     # 创建队列和线程列表
+# #     file_queue = Queue()
+# #     threads = []
+# #
+# #     # 定义一个列表来存储文件夹信息
+# #     folder_info = []
+# #
+# #     # 遍历文件夹及其所有子文件夹，并将文件路径加入队列
+# #     for root, dirs, files in os.walk(folder_path):
+# #         for file in files:
+# #             file_path = os.path.join(root, file)
+# #             file_queue.put(file_path)
+# #
+# #     # 定义线程函数
+# #     def process_files():
+# #         while True:
+# #             file_path = file_queue.get()
+# #             if file_path is None:
+# #                 break
+# #             file_size_kb = calculate_file_size(file_path)
+# #             folder_name = os.path.basename(os.path.dirname(file_path))
+# #             file_name = os.path.basename(file_path)
+# #             folder_info.append([os.path.dirname(file_path), folder_name, file_name, file_size_kb])
+# #             file_queue.task_done()
+# #
+# #     # 启动多线程
+# #     for i in range(4):
+# #         t = threading.Thread(target=process_files)
+# #         t.start()
+# #         threads.append(t)
+# #
+# #     # 等待所有线程完成
+# #     file_queue.join()
+# #
+# #     # 停止线程
+# #     for i in range(4):
+# #         file_queue.put(None)
+# #     for t in threads:
+# #         t.join()
+# #
+# #     # 显示程序运行结果
+# #     result_label.config(text="Program finished running.")
+# #
+# #     # 生成目录列表Excel文件
+# #     output_excel_file_path = os.path.join(folder_path, "Catalogue List.xlsx")
+# #     with pd.ExcelWriter(output_excel_file_path, engine='xlsxwriter') as writer:
+# #         df = pd.DataFrame(folder_info, columns=['Folder Path', 'Folder Name', 'File Name', 'File Size(KB)'])
+# #         df.to_excel(writer, index=False)
+# #         workbook = writer.book
+# #         worksheet = writer.sheets['Sheet1']
+# #         bold_format = workbook.add_format({'bold': True, 'align': 'center'})
+# #         center_format = workbook.add_format({'align': 'center'})
+# #         for col_num, value in enumerate(df.columns.values):
+# #             worksheet.write(0, col_num, value, bold_format)
+# #             worksheet.set_column(col_num, col_num, len(str(value)) + 20)
+# #             worksheet.set_row(0, None, bold_format)
+# #         for row_num, row_data in enumerate(df.values):
+# #             for col_num, value in enumerate(row_data):
+# #                 worksheet.write(row_num + 1, col_num, value, center_format)
+# #
+# #     # 显示生成结果
+# #     catalogue_result_label.config(text="The catalogue list was output to the file of Catalogue List.xlsx")
+# #
+# #
+# # # 创建人机界面
+# # if __name__ == "__main__":
+# #     root = tk.Tk()
+# #     root.title("Folder_Check(Made by PP2)")
+# #     root.geometry("800x400")
+# #
+# #     # 创建输入框
+# #     folder_path_var = tk.StringVar()
+# #     folder_path_entry = tk.Entry(root, textvariable=folder_path_var, width=50)
+# #     folder_path_entry.pack(pady=10)
+# #
+# #     # 创建生成目录列表按钮
+# #     catalogue_button = tk.Button(root, text="File Catalogue", command=generate_catalogue)
+# #     catalogue_button.pack(pady=10)
+# #
+# #     # 创建结果标签和作者
+# #     result_label = tk.Label(root)
+# #     result_label.pack()
+# #     author_label = tk.Label(root)
+# #     author_label.pack()
+# #     catalogue_result_label = tk.Label(root)
+# #     catalogue_result_label.pack()
+# #
+# #     # 显示人机界面
+# #     root.mainloop()
+#
+#
+#
+# # Folder_Check4.0
+# import os
+# import tkinter as tk
+# from tkinter import ttk
+# import pandas as pd
+#
+# def calculate_file_size(file_path):
+#     file_size = os.path.getsize(file_path)
+#     file_size_kb = round(file_size / 1024, 2)
+#     return file_size_kb
+#
+# def generate_catalogue():
+#     folder_path = folder_path_var.get()
+#
+#     # 显示程序运行结果
+#     # result_label.config(text="Program started running.")
+#
+#     # 遍历文件夹及其所有子文件夹，并检查是否为空
+#     folder_info = []
+#     folder_count = 0
+#     checked_count = 0
+#     for root, dirs, files in os.walk(folder_path):
+#         folder_count += 1
+#         if len(files) == 0:
+#             folder_info.append([root, os.path.basename(root), "！！！Folder Is Empty！！！", ""])
+#         elif len(files) >= 1:
+#             folder_name = os.path.basename(root)
+#             for file in files:
+#                 file_name = os.path.join(root, file)
+#                 file_size_kb = calculate_file_size(file_name)
+#                 folder_info.append([root, folder_name, file, file_size_kb])
+#         checked_count += 1
+#         count_label.config(text=f"Total Folders: {folder_count}, Checked Folders: {checked_count}")
+#
+#     # 显示程序运行结果
+#     result_label.config(text="Program finished running.")
+#
+#     # 生成目录列表Excel文件
+#     output_excel_file_path = os.path.join(folder_path, "Catalogue List.xlsx")
+#     with pd.ExcelWriter(output_excel_file_path, engine='xlsxwriter') as writer:
+#         df = pd.DataFrame(folder_info, columns=['Folder Path', 'Folder Name', 'File Name', 'File Size(KB)'])
+#         df.to_excel(writer, index=False)
+#         workbook = writer.book
+#         worksheet = writer.sheets['Sheet1']
+#         bold_format = workbook.add_format({'bold': True, 'align': 'center'})
+#         center_format = workbook.add_format({'align': 'center'})
+#         for col_num, value in enumerate(df.columns.values):
+#             worksheet.write(0, col_num, value, bold_format)
+#             worksheet.set_column(col_num, col_num, len(str(value)) + 20)
+#             worksheet.set_row(0, None, bold_format)
+#         for row_num, row_data in enumerate(df.values):
+#             for col_num, value in enumerate(row_data):
+#                 worksheet.write(row_num + 1, col_num, value, center_format)
+#
+#     # 显示生成结果
+#     catalogue_result_label.config(text="The catalogue list was output to the file of Catalogue List.xlsx")
+#
+# # 创建人机界面
+# if __name__ == "__main__":
+#     root = tk.Tk()
+#     root.title("Folder_Check(Made by PP2)")
+#     root.geometry("800x400")
+#
+#     # 创建输入框
+#     folder_path_var = tk.StringVar()
+#     folder_path_entry = tk.Entry(root, textvariable=folder_path_var, width=50)
+#     folder_path_entry.pack(pady=10)
+#
+#     # 创建生成目录列表按钮
+#     catalogue_button = tk.Button(root, text="File Catalogue", command=generate_catalogue)
+#     catalogue_button.pack(pady=10)
+#
+#     # 创建显示文件夹数量的label
+#     count_label = tk.Label(root)
+#     count_label.pack()
+#
+#     # 创建结果标签和作者
+#     result_label = tk.Label(root)
+#     result_label.pack()
+#     author_label = tk.Label(root)
+#     author_label.pack()
+#     catalogue_result_label = tk.Label(root)
+#     catalogue_result_label.pack()
+#
+#     # 显示人机界面
+#     root.mainloop()
+#
