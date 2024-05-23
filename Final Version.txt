@@ -83,7 +83,7 @@ def start_program():
 
 # 创建GUI界面
 root = tk.Tk()
-root.title("Folder Catalogue Generator")
+root.title("Folder Catalogue Generator, Made by Bin PP2")
 
 # 创建GUI界面的控件
 folder_path_var = tk.StringVar()
